@@ -2,9 +2,11 @@
 # PUZ file specification from:
 #  https://code.google.com/archive/p/puz/wikis/FileFormat.wiki
 
+require 'json'
+
 module XWordConverter
   class Puzzle
-    attr_accessor :width, :height, :clues, :cells, :across_clues, :down_clues
+    attr_accessor :width, :height, :clues, :cells, :across_clues, :down_clues, :author, :copyright, :title
 
     def initialize()
       @across_clues = {}
@@ -13,11 +15,58 @@ module XWordConverter
 
     def parse_puz(input_file)
       puz_data = IO.binread input_file
-      parser = PuzParser.new puz_data
+      parser = PuzParser.new puz_data, self
     end
 
     def to_json()
+      puzzle_json = {}
+      puzzle_json["PackId"] = nil
+      puzzle_json["authors"] = [@author.force_encoding("ISO-8859-1")]
+      puzzle_json["created"] = nil
+      puzzle_json["day_of_week"] = nil
+      puzzle_json["enhanced_tier_date"] = nil
+      puzzle_json["format_type"] = nil
+      puzzle_json["last_modified"] = nil
+      puzzle_json["next_puzzle_in_streak"] = false
+      puzzle_json["percentageComplete"] = 0
+      puzzle_json["print_date"] = "" # TODO: Send a real date
+      puzzle_json["publish_type"] = nil
+      puzzle_json["published"] = nil
+      puzzle_json["puzzle_id"] = "" # TODO: Send a puzzle ID
+      puzzle_json["puzzle_meta"] = {
+        "author": @author.force_encoding("ISO-8859-1"),
+        "copyright": @copyright.force_encoding("ISO-8859-1"),
+        "editor": "",
+        "formatType": "Normal",
+        "height": @height,
+        "layoutExtra": [],
+        "links": [],
+        "notes": [],
+        "printDate": "", # TODO: Send real date
+        "printDotw": "", # TODO: Send real day of day of week
+        "publishType": "Daily",
+        "title": @title.force_encoding("ISO-8859-1"),
+        "width": @width
+      }
+      puzzle_json["puzzle_type"] = 1
+      puzzle_json["status"] = nil
+      puzzle_json["tags"] = nil
+      puzzle_json["version"] = 2
+      puzzle_json["weekly_free_date"] = nil
+      puzzle_json["puzzle_data"] = {
+        "answers": @cells
+      }
+      puzzle_json["clues"] = {}
+      puzzle_json["clues"]["A"] = []
+      @across_clues.each_value do |clue|
+        puzzle_json["clues"]["A"] << clue
+      end
+      puzzle_json["clues"]["D"] = []
+      @down_clues.each_value do |clue|
+        puzzle_json["clues"]["D"] << clue
+      end
 
+      puzzle_json.to_json
     end
   end
 
@@ -75,15 +124,15 @@ module XWordConverter
 
     def parse_strings(strings_data)
       strings = strings_data.split("\000")
-      title = strings[0]
-      author = strings[1]
-      copyright = strings[2]
+      @puzzle.title = strings[0]
+      @puzzle.author = strings[1]
+      @puzzle.copyright = strings[2]
 
-      $stderr.puts "Title: #{title}"
-      $stderr.puts "Author: #{author}"
-      $stderr.puts "Copyright: #{copyright}"
+      $stderr.puts "Title: #{@puzzle.title}"
+      $stderr.puts "Author: #{@puzzle.author}"
+      $stderr.puts "Copyright: #{@puzzle.copyright}"
 
-      clues = strings.slice(3..@num_clues+3)
+      clues = strings.slice(3..@num_clues+3).map {|text| text.force_encoding("ISO-8859-1")}
       create_clues(clues)
 
       $stderr.puts "Across:"
@@ -109,12 +158,12 @@ module XWordConverter
           assigned_number = false
           length = across_cell(x, y)
           if length
-            @puzzle.across_clues[cell_number] = Clue.new(clues.shift, length)
+            @puzzle.across_clues[cell_number] = Clue.new(cell_number, clues.shift, length, cell_index(x, y), cell_index(x+length-1, y))
             assigned_number = true
           end
           length = down_cell(x, y)
           if length
-            @puzzle.down_clues[cell_number] = Clue.new(clues.shift, length)
+            @puzzle.down_clues[cell_number] = Clue.new(cell_number, clues.shift, length, cell_index(x, y), cell_index(x, y+(length*(@puzzle.width-1))))
             assigned_number = true
           end
           if assigned_number
@@ -168,11 +217,25 @@ module XWordConverter
   end
 
   class Clue
-    attr_reader :text, :length
+    attr_reader :number, :text, :length, :start, :end
 
-    def initialize(text, length)
+    def initialize(number, text, length, start_cell, end_cell)
+      @number = number
       @text = text
       @length = length
+      @start = start_cell
+      @end = end_cell
+    end
+
+    def to_json(not_used)
+      {
+        "value": @text,
+        "clueStart": @start,
+        "clueEnd": @end,
+        "formatted": nil,
+        "related": nil,
+        "clueNum": @number
+      }.to_json
     end
   end
 
@@ -183,4 +246,8 @@ end
 if __FILE__ == $0
   puzzle = XWordConverter::Puzzle.new
   puzzle.parse_puz("examples/Jul3116.puz")
+  puzzle_json = puzzle.to_json
+  File.open("test_output.json", "w") do |file|
+    file.puts puzzle_json
+  end
 end
