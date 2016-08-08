@@ -4,10 +4,11 @@
 
 module XWordConverter
   class Puzzle
-    attr_accessor :width, :height, :clues, :cells
+    attr_accessor :width, :height, :clues, :cells, :across_clues, :down_clues
 
     def initialize()
-
+      @across_clues = {}
+      @down_clues = {}
     end
 
     def parse_puz(input_file)
@@ -67,8 +68,8 @@ module XWordConverter
     end
 
     def parse_layout(layout_data)
-      cells = layout_data.bytes.pack("c*")
-      @puzzle.cells = cells
+      cells = layout_data.bytes.pack("c*").chars
+      @puzzle.cells = cells.map {|cell| cell != '.' ? cell : nil }
       $stderr.puts "Cells: #{cells}"
     end
 
@@ -82,9 +83,96 @@ module XWordConverter
       $stderr.puts "Author: #{author}"
       $stderr.puts "Copyright: #{copyright}"
 
-      strings.slice(3..@num_clues+3).each do |clue|
-        $stderr.puts "#{clue}"
+      clues = strings.slice(3..@num_clues+3)
+      create_clues(clues)
+
+      $stderr.puts "Across:"
+      @puzzle.across_clues.each do |number, clue|
+        $stderr.puts "#{number}: #{clue.text} (#{clue.length} letters)"
       end
+
+      $stderr.puts "\nDown:"
+      @puzzle.down_clues.each do |number, clue|
+        $stderr.puts "#{number}: #{clue.text} (#{clue.length} letters)"
+      end
+    end
+
+    def create_clues(clues)
+      cell_number = 1
+
+      (0..@puzzle.height-1).each do |y|
+        (0..@puzzle.width-1).each do |x|
+          if @puzzle.cells[cell_index(x, y)] == nil
+            next
+          end
+
+          assigned_number = false
+          length = across_cell(x, y)
+          if length
+            @puzzle.across_clues[cell_number] = Clue.new(clues.shift, length)
+            assigned_number = true
+          end
+          length = down_cell(x, y)
+          if length
+            @puzzle.down_clues[cell_number] = Clue.new(clues.shift, length)
+            assigned_number = true
+          end
+          if assigned_number
+            cell_number += 1
+          end
+        end
+      end
+    end
+
+    def across_cell(x, y)
+      if x == 0 || @puzzle.cells[cell_index(x-1, y)] == nil
+        if x + 1 < @puzzle.width && @puzzle.cells[cell_index(x+1, y)] != nil
+          across_clue_length(x, y)
+        end
+      end
+    end
+
+    def across_clue_length(x, y)
+      length = 0
+      (x..@puzzle.width-1).each do |position|
+        if @puzzle.cells[cell_index(position, y)] == nil
+          break
+        end
+        length += 1
+      end
+      length
+    end
+
+    def down_cell(x, y)
+      if y == 0 || @puzzle.cells[cell_index(x, y-1)] == nil
+        if y + 1 < @puzzle.height && @puzzle.cells[cell_index(x, y+1)] != nil
+          down_clue_length(x, y)
+        end
+      end
+    end
+
+    def down_clue_length(x, y)
+      length = 0
+      (y..@puzzle.height-1).each do |position|
+        if @puzzle.cells[cell_index(x, position)] == nil
+          break
+        end
+        length += 1
+      end
+      length
+    end
+
+    def cell_index(x, y)
+      y * @puzzle.width + x
+    end
+  end
+
+  class Clue
+    attr_reader :text, :length
+
+    def initialize(text, length)
+      @text = text
+      @length = length
     end
   end
 
