@@ -227,7 +227,7 @@ module XWordConverter
       @end = end_cell
     end
 
-    def to_json(not_used)
+    def to_json(options = {})
       {
         "value": @text,
         "clueStart": @start,
